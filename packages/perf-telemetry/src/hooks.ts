@@ -109,6 +109,7 @@ export function useDoneRendering(
   const routeId = opts?.routeId
     ?? (signalName.endsWith('.ready') ? signalName.slice(0, -'.ready'.length) : 'unknown');
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: signalName is the change trigger; body intentionally resets only refs.
   useEffect(() => {
     cancelPendingAnimationFrames(rafIdsRef.current);
     rafIdsRef.current = [];
@@ -288,6 +289,63 @@ type InstrumentedFetchOptions = {
   debugLogger?: (event: string, payload?: DebugLoggerPayload) => void;
 };
 
+function resolveSameOrigin(
+  url: string,
+  opts?: InstrumentedFetchOptions,
+): { sameOrigin: boolean; appOrigin: string } {
+  const win = Reflect.get(globalThis, 'window') as Window | undefined;
+  const appOrigin = win?.location.origin ?? 'unknown';
+  try {
+    const parsed = new URL(url, appOrigin === 'unknown' ? 'http://localhost' : appOrigin);
+    const sameOrigin = parsed.origin === appOrigin || appOrigin === 'unknown';
+    return { sameOrigin, appOrigin };
+  } catch (e) {
+    opts?.debugLogger?.('fetch.url_parse_failed', e instanceof Error ? e : String(e));
+    return { sameOrigin: false, appOrigin };
+  }
+}
+
+const HTTP_METHOD_UPPER = new Map<string, string>([
+  ['get', 'GET'], ['post', 'POST'], ['put', 'PUT'], ['patch', 'PATCH'],
+  ['delete', 'DELETE'], ['head', 'HEAD'], ['options', 'OPTIONS'],
+  ['GET', 'GET'], ['POST', 'POST'], ['PUT', 'PUT'], ['PATCH', 'PATCH'],
+  ['DELETE', 'DELETE'], ['HEAD', 'HEAD'], ['OPTIONS', 'OPTIONS'],
+]);
+
+function startApiSpan(
+  url: string,
+  meta: FetchMeta,
+  init: RequestInit | undefined,
+  parentCtxIn: ReturnType<typeof context.active>,
+  opts?: InstrumentedFetchOptions,
+): { span: ReturnType<ReturnType<typeof getTracer>['startSpan']> | null; parentCtx: ReturnType<typeof context.active> } {
+  let parentCtx = parentCtxIn;
+  try {
+    const tracer = getTracer('hai3-api');
+    const methodRaw = String(init?.method || 'GET');
+    const method = HTTP_METHOD_UPPER.get(methodRaw) ?? methodRaw;
+    const normalizedUrl = normalizeUrlForSpan(url);
+    const startedAt = performance.now();
+    parentCtx = getTelemetryParentContext(meta.routeId, startedAt) || context.active();
+    const activeActionAttrs = getRelatedActionAttributes(meta.routeId, startedAt);
+    const resolvedActionName = meta.actionName || activeActionAttrs['action.name'] || 'unknown';
+    const span = tracer.startSpan(`${method} ${normalizedUrl}`, {
+      attributes: {
+        ...activeActionAttrs,
+        'route.id': meta.routeId,
+        'action.name': resolvedActionName,
+        'http.url': normalizedUrl,
+        'http.method': method,
+        'telemetry.breakdown.kind': 'backend.api',
+      },
+    }, parentCtx);
+    return { span, parentCtx };
+  } catch (e) {
+    opts?.debugLogger?.('span.start.failed', e instanceof Error ? e : String(e));
+    return { span: null, parentCtx };
+  }
+}
+
 /**
  * Fetch wrapper that creates an HTTP span correlated to the active action and
  * route UI scope. Span attachment is gated on a same-origin check — cross-origin
@@ -304,52 +362,14 @@ export async function instrumentedFetch(
   init?: RequestInit,
   opts?: InstrumentedFetchOptions,
 ): Promise<Response> {
-  const win = Reflect.get(globalThis, 'window') as Window | undefined;
-  const appOrigin = win?.location.origin ?? 'unknown';
-  let sameOrigin = true;
-  try {
-    const parsed = new URL(url, appOrigin === 'unknown' ? 'http://localhost' : appOrigin);
-    sameOrigin = parsed.origin === appOrigin || appOrigin === 'unknown';
-  } catch (e) {
-    opts?.debugLogger?.('fetch.url_parse_failed', e instanceof Error ? e : String(e));
-    sameOrigin = false;
-  }
+  const { sameOrigin } = resolveSameOrigin(url, opts);
 
   if (!sameOrigin) {
     opts?.debugLogger?.('fetch.cross_origin', `cross_origin:${url}`);
     return globalThis.fetch(url, init);
   }
 
-  let span: ReturnType<ReturnType<typeof getTracer>['startSpan']> | null = null;
-  let parentCtx = context.active();
-  try {
-    const tracer = getTracer('hai3-api');
-    const methodRaw = String(init?.method || 'GET');
-    const HTTP_UPPER = new Map<string, string>([
-      ['get', 'GET'], ['post', 'POST'], ['put', 'PUT'], ['patch', 'PATCH'],
-      ['delete', 'DELETE'], ['head', 'HEAD'], ['options', 'OPTIONS'],
-      ['GET', 'GET'], ['POST', 'POST'], ['PUT', 'PUT'], ['PATCH', 'PATCH'],
-      ['DELETE', 'DELETE'], ['HEAD', 'HEAD'], ['OPTIONS', 'OPTIONS'],
-    ]);
-    const method = HTTP_UPPER.get(methodRaw) ?? methodRaw;
-    const normalizedUrl = normalizeUrlForSpan(url);
-    const startedAt = performance.now();
-    parentCtx = getTelemetryParentContext(meta.routeId, startedAt) || context.active();
-    const activeActionAttrs = getRelatedActionAttributes(meta.routeId, startedAt);
-    const resolvedActionName = meta.actionName || activeActionAttrs['action.name'] || 'unknown';
-    span = tracer.startSpan(`${method} ${normalizedUrl}`, {
-      attributes: {
-        ...activeActionAttrs,
-        'route.id': meta.routeId,
-        'action.name': resolvedActionName,
-        'http.url': normalizedUrl,
-        'http.method': method,
-        'telemetry.breakdown.kind': 'backend.api',
-      },
-    }, parentCtx);
-  } catch (e) {
-    opts?.debugLogger?.('span.start.failed', e instanceof Error ? e : String(e));
-  }
+  const { span, parentCtx } = startApiSpan(url, meta, init, context.active(), opts);
 
   try {
     const fetchCtx = span ? trace.setSpan(parentCtx, span) : parentCtx;

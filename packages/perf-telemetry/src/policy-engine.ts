@@ -21,7 +21,7 @@ interface FreezableRecord {
 
 function deepFreeze<T>(value: T): Readonly<T> {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) {
-    return value as Readonly<T>;
+    return value;
   }
 
   for (const nestedValue of Object.values(

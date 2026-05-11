@@ -66,7 +66,7 @@ export function telemetry(config?: TelemetryPluginConfig): HAI3Plugin {
     async onInit() {
       const enabled = config?.enabled ?? false; // safe default
       if (!enabled) return;
-      if (!config?.serviceName || !config?.collectorUrl) return;
+      if (!config?.serviceName || !config.collectorUrl) return;
 
       try {
         // Dynamic import to keep @cyberfabric/perf-telemetry optional — cached for onDestroy

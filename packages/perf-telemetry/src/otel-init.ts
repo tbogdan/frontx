@@ -335,22 +335,21 @@ class HAI3SpanProcessor implements SpanProcessor {
 
 // ─── Initialization ──────────────────────────────────────────────────────────
 
+// @cpt-begin:cpt-frontx-algo-perf-telemetry-config-defaults:p1:inst-validate-required
+function reportInvalidConfig(config: OtelConfig): boolean {
+  const missing: string[] = [];
+  if (config.serviceName === '') missing.push('serviceName');
+  if (config.collectorUrl === '') missing.push('collectorUrl');
+  if (missing.length === 0) return false;
+  config.debugLogger?.('init.config_invalid', { missing });
+  return true;
+}
+// @cpt-end:cpt-frontx-algo-perf-telemetry-config-defaults:p1:inst-validate-required
+
 export function initOtel(config: OtelConfig): void {
-  // @cpt-begin:cpt-frontx-algo-perf-telemetry-config-defaults:p1:inst-validate-required
   if (_initialized) return;
   if (!config.enabled) return;
-  if (!config.serviceName || !config.collectorUrl) {
-    config.debugLogger?.('init.config_invalid', {
-      missing: (
-        [
-          !config.serviceName ? 'serviceName' : null,
-          !config.collectorUrl ? 'collectorUrl' : null,
-        ] as Array<string | null>
-      ).filter((v): v is string => v !== null),
-    });
-    return;
-  }
-  // @cpt-end:cpt-frontx-algo-perf-telemetry-config-defaults:p1:inst-validate-required
+  if (reportInvalidConfig(config)) return;
 
   _debugLogger = config.debugLogger;
   resetNavigationTimingEmitted();

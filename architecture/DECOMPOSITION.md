@@ -16,14 +16,15 @@
   - [2.10 Publishing Pipeline ⏳ MEDIUM](#210-publishing-pipeline--medium)
   - [2.11 UI Libraries Choice ⏳ HIGH](#211-ui-libraries-choice--high)
   - [2.12 Request Lifecycle & Query Integration ⏳ HIGH](#212-request-lifecycle--query-integration--high)
-  - [2.13 Unit Test Generation & Agent Verification ⏳ MEDIUM](#213-unit-test-generation--agent-verification--medium)
+  - [2.13 Performance Telemetry ⏳ MEDIUM](#213-performance-telemetry--medium)
+  - [2.14 Unit Test Generation & Agent Verification ⏳ MEDIUM](#214-unit-test-generation--agent-verification--medium)
 - [3. Feature Dependencies](#3-feature-dependencies)
 
 <!-- /toc -->
 
 ## 1. Overview
 
-The DESIGN is decomposed into 13 features aligned with package/module boundaries in the monorepo. Each feature maps to a cohesive set of source files that can be implemented, tested, and reviewed independently.
+The DESIGN is decomposed into 14 features aligned with package/module boundaries in the monorepo. Each feature maps to a cohesive set of source files that can be implemented, tested, and reviewed independently.
 
 **Decomposition strategy**: One feature per logical package or cross-cutting capability. L1 SDK packages each get their own feature (state, screensets, api, i18n). L2/L3 packages get their own features. MFE isolation is separated from screenset registry because it spans multiple packages and has distinct FRs. Standalone packages (studio, cli) are individual features, and UI strategy is captured as a separate CLI-driven feature. Publishing/CI is a separate infrastructure feature. Unit-test generation extends the CLI tooling with test scaffolding, starter tests, and AI agent verification guidance.
 
@@ -813,7 +814,77 @@ The DESIGN is decomposed into 13 features aligned with package/module boundaries
 
   - `cpt-frontx-adr-tanstack-query-data-management`
 
-### 2.13 [Unit Test Generation & Agent Verification](feature-unit-test-generation-and-agent-verification/) ⏳ MEDIUM
+### 2.13 [Performance Telemetry](feature-perf-telemetry/) ⏳ MEDIUM
+
+- [x] `p2` - **ID**: `cpt-frontx-feature-perf-telemetry`
+
+- **Purpose**: Provides action-first frontend performance telemetry via OpenTelemetry Browser SDK. Every span belongs to a named action (explicit or ambient fallback), enabling per-action performance breakdown in Datadog APM. Includes a Studio dev panel for local visibility.
+
+- **Depends On**: None (L1 SDK, zero @cyberfabric dependencies)
+
+- **Scope**:
+  - `@cyberfabric/perf-telemetry` L1 SDK package (action-scope, otel-init, hooks, TelemetryProvider, telemetry-store)
+  - Framework `telemetry()` plugin (opt-in via full preset config)
+  - Studio `PerfTelemetryPanel` section (dev-mode, renders when package installed)
+  - Cross-runtime `sharedTelemetryRegistry` on `globalThis` so MFE child runtimes converge on a single host-owned `telemetryStore`
+  - Docker OTel Collector -> Datadog export infrastructure
+  - AI guidelines: `.ai/targets/PERF_TELEMETRY.md`, `.ai/references/telemetry/*`
+
+- **Out of scope**:
+  - Backend/server-side telemetry
+  - Custom Datadog dashboard creation
+  - Production collector infrastructure (only local dev collector provided)
+
+- **Requirements Covered**:
+
+  - [x] `p1` - `cpt-frontx-fr-perf-action-first-correlation`
+  - [x] `p1` - `cpt-frontx-fr-perf-route-instrumentation`
+  - [x] `p1` - `cpt-frontx-fr-perf-action-instrumentation`
+  - [x] `p1` - `cpt-frontx-fr-perf-api-instrumentation`
+  - [x] `p1` - `cpt-frontx-fr-perf-web-vitals`
+  - [x] `p2` - `cpt-frontx-fr-perf-studio-panel`
+  - [x] `p1` - `cpt-frontx-fr-perf-fail-open`
+  - [x] `p1` - `cpt-frontx-fr-perf-cross-runtime-registry`
+
+- **Design Principles Covered**:
+  - Action-first correlation (no orphan spans)
+  - Fail-open (telemetry errors never crash UX)
+  - Cross-runtime convergence via `globalThis` registry (matches `sharedFetchCache` precedent)
+
+- **Design Constraints Covered**:
+
+  - [x] `p1` - `cpt-frontx-constraint-typescript-strict-mode`
+  - [x] `p1` - `cpt-frontx-constraint-zero-cross-deps-at-l1` (L1 SDK)
+
+- **Domain Model Entities**:
+  - ActionScope, RouteUiScope, StoredSpan, TelemetryRuntimeConfig, SharedTelemetryRegistry
+
+- **Design Components**:
+
+  - [x] `p1` - `cpt-frontx-component-perf-telemetry`
+  - [x] `p2` - `cpt-frontx-component-studio`
+
+- **API**:
+  - `useRoutePerf(routeId, navigationStartMs)`
+  - `useDoneRendering(signalName, { dataReady })`
+  - `useTelemetryAction(actionName, { routeId })`
+  - `useWebVitals(routeId)`
+  - `instrumentedFetch(url, meta, init)`
+  - `TelemetryProvider` React context
+  - `telemetryStore.subscribe()` for dev panel
+  - `sharedTelemetryRegistry.acquire(runtimeId)` / `release(runtimeId)` for cross-runtime span aggregation
+
+- **Sequences**:
+  - Action lifecycle: create span -> register scope -> execute work -> end scope -> export
+  - Ambient resolution: search active -> search recent -> create ambient
+  - Cross-runtime join: child `initOtel` -> resolve `globalThis[Symbol.for('frontx:telemetry-registry')]` -> retain shared store -> append spans -> release on `shutdownOtel`
+
+- **Data**:
+  - In-memory span buffer (max 500, TelemetryStoreProcessor)
+  - localStorage: `frontx:studio:perfTelemetry` (panel toggle)
+  - `globalThis[Symbol.for('frontx:telemetry-registry')]`: versioned `SharedTelemetryRegistry`
+
+### 2.14 [Unit Test Generation & Agent Verification](feature-unit-test-generation-and-agent-verification/) ⏳ MEDIUM
 
 - [x] `p1` - **ID**: `cpt-frontx-feature-unit-test-generation-and-agent-verification`
 
@@ -884,6 +955,7 @@ cpt-frontx-feature-state-management          (L1, no deps)
 cpt-frontx-feature-mfe-registry        (L1, no deps)
 cpt-frontx-feature-api-communication         (L1, no deps)
 cpt-frontx-feature-i18n-infrastructure       (L1, no deps)
+cpt-frontx-feature-perf-telemetry            (L1 SDK, no deps)
 cpt-frontx-feature-studio-devtools           (standalone, no deps)
 cpt-frontx-feature-cli-tooling               (standalone, no deps)
 cpt-frontx-feature-publishing-pipeline       (infrastructure, no deps)

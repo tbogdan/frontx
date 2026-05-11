@@ -4,6 +4,7 @@ import { useTranslation } from '@cyberfabric/react';
 import { ThemeSelector } from './ThemeSelector';
 import { LanguageSelector } from './LanguageSelector';
 import { ApiModeToggle } from './ApiModeToggle';
+import { PerfTelemetryPanel } from './PerfTelemetryPanel';
 
 // @cpt-begin:cpt-frontx-dod-studio-devtools-control-panel:p1:inst-1
 export const ControlPanel: React.FC = () => {
@@ -22,6 +23,9 @@ export const ControlPanel: React.FC = () => {
           <LanguageSelector />
         </div>
       </div>
+
+      {/* Performance Telemetry (renders only when @cyberfabric/perf-telemetry is installed) */}
+      <PerfTelemetryPanel />
     </div>
   );
 };

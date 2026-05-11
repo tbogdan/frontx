@@ -54,6 +54,7 @@
     "@cyberfabric/screensets": "*",
     "@cyberfabric/api": "*",
     "@cyberfabric/i18n": "*",
+    "@cyberfabric/perf-telemetry": "*",
     "@tanstack/query-core": "^5.0.0",
     "vitest": "4.1.4"
   },
@@ -75,6 +76,9 @@
     },
     "@tanstack/query-core": {
       "optional": false
+    },
+    "@cyberfabric/perf-telemetry": {
+      "optional": true
     },
     "vitest": {
       "optional": true

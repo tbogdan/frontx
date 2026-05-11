@@ -15,14 +15,16 @@
  */
 
 // L1 — SDK packages. Must have zero `@cyberfabric/*` dependencies and no React.
-const SDK_PACKAGES = Object.freeze(['state', 'api', 'i18n', 'screensets']);
+const SDK_PACKAGES = Object.freeze(['state', 'api', 'i18n', 'screensets', 'perf-telemetry']);
 
 // L2 — Framework package may import exactly these SDK packages (no more).
+// `perf-telemetry` is an optional peer dep of the framework telemetry() plugin.
 const ALLOWED_FRAMEWORK_SDK_DEPS = Object.freeze([
   '@cyberfabric/state',
   '@cyberfabric/api',
   '@cyberfabric/i18n',
   '@cyberfabric/screensets',
+  '@cyberfabric/perf-telemetry',
 ]);
 
 // Packages that have been removed / folded into another layer. Any surviving

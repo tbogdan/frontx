@@ -148,9 +148,15 @@ jobs:
         fi
         echo "All packages include AI documentation in files array"
 
-  # Optional: Run promptfoo tests if configured
+  # Optional: Run promptfoo tests only when the referenced prompts exist.
+  # Gate looks for `frontx-validate.md` as the canonical sentinel: the prompt
+  # set in `.ai/tests/promptfoo.yaml` was authored against a `frontx-validate`
+  # command. If that file is not on disk the config is stale (left over from
+  # the hai3→frontx refactor) and promptfoo would `ENOENT` immediately — so
+  # we skip the job entirely instead of failing it.
   promptfoo-tests:
     runs-on: ubuntu-latest
+    if: ${{ hashFiles('.ai/commands/user/frontx-validate.md') != '' }}
 
     steps:
     - name: Checkout code

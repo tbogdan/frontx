@@ -24,6 +24,7 @@
   - [Span Export Gating](#span-export-gating)
   - [Cross-Runtime Registry Acquisition](#cross-runtime-registry-acquisition)
   - [Session ID Generation](#session-id-generation)
+  - [Config Defaults and Required-Field Validation](#config-defaults-and-required-field-validation)
 - [4. States (CDSL)](#4-states-cdsl)
   - [OTel SDK Lifecycle](#otel-sdk-lifecycle)
   - [Action Scope Lifecycle](#action-scope-lifecycle)
@@ -300,6 +301,26 @@ Success criteria: Every span in Datadog APM has `action.name`. A developer can s
 4. ELSE generate via crypto.randomUUID() or Date.now() fallback
 5. Store in sessionStorage
 6. RETURN generated ID
+```
+
+---
+
+### Config Defaults and Required-Field Validation
+
+- [x] `p1` - **ID**: `cpt-frontx-algo-perf-telemetry-config-defaults`
+
+**Input**: `config: OtelConfig`
+**Output**: `boolean` — `true` if invalid (init must skip), `false` if valid
+
+Required fields enforced at init: `serviceName`, `collectorUrl`. Missing fields are reported via `debugLogger('init.config_invalid', { missing })` and SDK init is skipped fail-open — never throws to the host app. Optional fields fall back to module-level defaults (`exportToCollector: true`, `includeDebugData: false`, `policyProfile: 'baseline'`, empty account attributes) until the host injects a live provider via `setRuntimeConfigProvider()`.
+
+```text
+1. missing = []
+2. IF config.serviceName === '' THEN missing.push('serviceName')
+3. IF config.collectorUrl === '' THEN missing.push('collectorUrl')
+4. IF missing.length === 0 THEN RETURN false  // valid, proceed with init
+5. config.debugLogger?.('init.config_invalid', { missing })
+6. RETURN true  // invalid, initOtel() returns without bootstrapping
 ```
 
 ---

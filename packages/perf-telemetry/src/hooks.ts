@@ -63,12 +63,15 @@ export function useRoutePerf(routeId: string, navigationStartMs: number) {
   const lastEmittedKeyRef = useRef<string>('');
 
   useEffect(() => {
+    // @cpt-begin:cpt-frontx-flow-perf-telemetry-route-instrumentation:p1:inst-set-route-id
     const key = `${routeId}|${navigationStartMs}`;
     if (lastEmittedKeyRef.current === key) return;
     lastEmittedKeyRef.current = key;
     setCurrentRouteId(routeId);
+    // @cpt-end:cpt-frontx-flow-perf-telemetry-route-instrumentation:p1:inst-set-route-id
 
     try {
+      // @cpt-begin:cpt-frontx-flow-perf-telemetry-route-instrumentation:p1:inst-create-nav-span
       const tracer = getTracer('hai3-route');
       const span = tracer.startSpan('route.navigation', {
         startTime: navigationStartMs,
@@ -78,10 +81,13 @@ export function useRoutePerf(routeId: string, navigationStartMs: number) {
           'telemetry.breakdown.kind': 'frontend.route',
         },
       }, getActionParentContext(navigationStartMs, routeId));
+      // @cpt-end:cpt-frontx-flow-perf-telemetry-route-instrumentation:p1:inst-create-nav-span
 
+      // @cpt-begin:cpt-frontx-flow-perf-telemetry-route-instrumentation:p1:inst-calc-nav-ms
       const mountTime = performance.now();
       span.setAttribute('route.navigation_ms', round2(mountTime - navigationStartMs));
       span.end(mountTime);
+      // @cpt-end:cpt-frontx-flow-perf-telemetry-route-instrumentation:p1:inst-calc-nav-ms
     } catch (e) {
       getDebugLogger()?.('route.span_failed', e instanceof Error ? e : String(e));
     }
@@ -111,6 +117,7 @@ export function useDoneRendering(
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: signalName is the change trigger; body intentionally resets only refs.
   useEffect(() => {
+    // @cpt-begin:cpt-frontx-dod-perf-telemetry-route-render:p1:inst-render-reset-refs
     cancelPendingAnimationFrames(rafIdsRef.current);
     rafIdsRef.current = [];
     firedRef.current = false;
@@ -121,6 +128,7 @@ export function useDoneRendering(
       cancelPendingAnimationFrames(rafIdsRef.current);
       rafIdsRef.current = [];
     };
+    // @cpt-end:cpt-frontx-dod-perf-telemetry-route-render:p1:inst-render-reset-refs
   }, [signalName]);
 
   useEffect(() => {
@@ -129,6 +137,7 @@ export function useDoneRendering(
     const mountTime = mountTimeRef.current;
 
     try {
+      // @cpt-begin:cpt-frontx-dod-perf-telemetry-route-render:p1:inst-done-rendering
       const tracer = getTracer('hai3-render');
       const { actionSnapshot, parentContext } = resolveActionSnapshotAndParentContext(routeId, mountTime);
       const readySpan = tracer.startSpan(signalName, {
@@ -151,12 +160,14 @@ export function useDoneRendering(
 
       applyActionSnapshotAttributes(actionSnapshot, readySpan, uiSpan);
       beginRouteUiScope({ routeId, signalName, startedAtMs: mountTime, readySpan, uiSpan, actionSnapshot });
+      // @cpt-end:cpt-frontx-dod-perf-telemetry-route-render:p1:inst-done-rendering
     } catch (e) { /* fail-open: reset ref so next mount can retry */
       getDebugLogger()?.('done_rendering.span_failed', e instanceof Error ? e : String(e));
       scopeCreatedRef.current = false;
     }
 
     return () => {
+      // @cpt-begin:cpt-frontx-dod-perf-telemetry-route-render:p1:inst-render-cleanup-unmount
       if (!firedRef.current) {
         const now = performance.now();
         const scope = endCapturedRouteUiScope(routeId, signalName, mountTime, now);
@@ -166,12 +177,14 @@ export function useDoneRendering(
           scope.readySpan.end(now);
         }
       }
+      // @cpt-end:cpt-frontx-dod-perf-telemetry-route-render:p1:inst-render-cleanup-unmount
     };
   }, [routeId, signalName]);
 
   useEffect(() => {
     if (firedRef.current) return;
     if (deps.dataReady) {
+      // @cpt-begin:cpt-frontx-dod-perf-telemetry-route-render:p1:inst-render-double-raf
       const jsEndTime = performance.now();
       if (!dataReadyTimeRef.current) dataReadyTimeRef.current = jsEndTime;
       const mountTime = mountTimeRef.current;
@@ -202,10 +215,12 @@ export function useDoneRendering(
         rafIdsRef.current.push(secondRafId);
       });
       rafIdsRef.current.push(firstRafId);
+      // @cpt-end:cpt-frontx-dod-perf-telemetry-route-render:p1:inst-render-double-raf
     }
   }, [deps.dataReady, signalName, routeId]);
 
   useEffect(() => {
+    // @cpt-begin:cpt-frontx-dod-perf-telemetry-route-render:p1:inst-render-timeout
     const mountTime = mountTimeRef.current;
     const timer = setTimeout(() => {
       if (!firedRef.current) {
@@ -226,6 +241,7 @@ export function useDoneRendering(
       }
     }, timeoutMs);
     return () => { clearTimeout(timer); };
+    // @cpt-end:cpt-frontx-dod-perf-telemetry-route-render:p1:inst-render-timeout
   }, [timeoutMs, signalName, routeId]);
 }
 
@@ -235,12 +251,14 @@ export function useDoneRendering(
 
 /** Returns a stable callback that wraps async work in a named action span with full correlation. */
 export function useTelemetryAction(actionName: string, defaults?: TelemetryActionOptions) {
+  // @cpt-begin:cpt-frontx-flow-perf-telemetry-action-instrumentation:p1:inst-create-action-hook
   const routeId = defaults?.routeId || 'unknown';
   const trigger = defaults?.trigger || 'click';
   return useCallback(
     async <T>(fn: () => Promise<T> | T): Promise<T> => runTelemetryAction(actionName, routeId, fn, trigger),
     [actionName, routeId, trigger]
   );
+  // @cpt-end:cpt-frontx-flow-perf-telemetry-action-instrumentation:p1:inst-create-action-hook
 }
 
 /**
@@ -253,6 +271,7 @@ export async function runTelemetryAction<T>(
   fn: () => Promise<T> | T,
   trigger: ActionTrigger = 'click'
 ): Promise<T> {
+  // @cpt-begin:cpt-frontx-flow-perf-telemetry-action-instrumentation:p1:inst-create-action-span
   const tracer = getTracer('hai3-action');
   const startedAtMs = performance.now();
   const span = tracer.startSpan(actionName, {
@@ -263,23 +282,33 @@ export async function runTelemetryAction<T>(
       'action.trigger': trigger,
     },
   });
+  // @cpt-end:cpt-frontx-flow-perf-telemetry-action-instrumentation:p1:inst-create-action-span
+
+  // @cpt-begin:cpt-frontx-flow-perf-telemetry-action-instrumentation:p1:inst-register-scope
   const spanContext = span.spanContext();
   beginActionScope({ span, spanId: spanContext.spanId, traceId: spanContext.traceId, actionName, routeId, startedAtMs });
   const parentContext = trace.setSpan(context.active(), span);
+  // @cpt-end:cpt-frontx-flow-perf-telemetry-action-instrumentation:p1:inst-register-scope
 
   try {
+    // @cpt-begin:cpt-frontx-flow-perf-telemetry-action-instrumentation:p1:inst-context-propagation
     const result = await context.with(parentContext, () => fn());
     span.setAttribute('action.status', 'ok');
     span.setStatus({ code: SpanStatusCode.OK });
     return result;
+    // @cpt-end:cpt-frontx-flow-perf-telemetry-action-instrumentation:p1:inst-context-propagation
   } catch (err) {
+    // @cpt-begin:cpt-frontx-flow-perf-telemetry-action-instrumentation:p1:inst-action-error
     span.setAttribute('action.status', 'error');
     span.setAttribute('action.error_type', err instanceof Error ? err.name : 'UnknownError');
     span.setStatus({ code: SpanStatusCode.ERROR, message: err instanceof Error ? err.message : String(err) });
     throw err;
+    // @cpt-end:cpt-frontx-flow-perf-telemetry-action-instrumentation:p1:inst-action-error
   } finally {
+    // @cpt-begin:cpt-frontx-flow-perf-telemetry-action-instrumentation:p1:inst-end-action
     endActionScope(spanContext.spanId, performance.now());
     span.end();
+    // @cpt-end:cpt-frontx-flow-perf-telemetry-action-instrumentation:p1:inst-end-action
   }
 }
 
@@ -321,6 +350,7 @@ function startApiSpan(
 ): { span: ReturnType<ReturnType<typeof getTracer>['startSpan']> | null; parentCtx: ReturnType<typeof context.active> } {
   let parentCtx = parentCtxIn;
   try {
+    // @cpt-begin:cpt-frontx-flow-perf-telemetry-api-instrumentation:p1:inst-inject-action
     const tracer = getTracer('hai3-api');
     const methodRaw = String(init?.method || 'GET');
     const method = HTTP_METHOD_UPPER.get(methodRaw) ?? methodRaw;
@@ -329,6 +359,9 @@ function startApiSpan(
     parentCtx = getTelemetryParentContext(meta.routeId, startedAt) || context.active();
     const activeActionAttrs = getRelatedActionAttributes(meta.routeId, startedAt);
     const resolvedActionName = meta.actionName || activeActionAttrs['action.name'] || 'unknown';
+    // @cpt-end:cpt-frontx-flow-perf-telemetry-api-instrumentation:p1:inst-inject-action
+
+    // @cpt-begin:cpt-frontx-flow-perf-telemetry-api-instrumentation:p1:inst-api-attrs
     const span = tracer.startSpan(`${method} ${normalizedUrl}`, {
       attributes: {
         ...activeActionAttrs,
@@ -340,6 +373,7 @@ function startApiSpan(
       },
     }, parentCtx);
     return { span, parentCtx };
+    // @cpt-end:cpt-frontx-flow-perf-telemetry-api-instrumentation:p1:inst-api-attrs
   } catch (e) {
     opts?.debugLogger?.('span.start.failed', e instanceof Error ? e : String(e));
     return { span: null, parentCtx };
@@ -362,6 +396,7 @@ export async function instrumentedFetch(
   init?: RequestInit,
   opts?: InstrumentedFetchOptions,
 ): Promise<Response> {
+  // @cpt-begin:cpt-frontx-dod-perf-telemetry-api:p1:inst-manual-fetch
   const { sameOrigin } = resolveSameOrigin(url, opts);
 
   if (!sameOrigin) {
@@ -370,8 +405,10 @@ export async function instrumentedFetch(
   }
 
   const { span, parentCtx } = startApiSpan(url, meta, init, context.active(), opts);
+  // @cpt-end:cpt-frontx-dod-perf-telemetry-api:p1:inst-manual-fetch
 
   try {
+    // @cpt-begin:cpt-frontx-dod-perf-telemetry-api:p1:inst-fetch-with-context
     const fetchCtx = span ? trace.setSpan(parentCtx, span) : parentCtx;
     const response = await context.with(fetchCtx, () => globalThis.fetch(url, init));
     if (span) {
@@ -379,7 +416,9 @@ export async function instrumentedFetch(
       span.setStatus({ code: response.ok ? SpanStatusCode.OK : SpanStatusCode.ERROR });
     }
     return response;
+    // @cpt-end:cpt-frontx-dod-perf-telemetry-api:p1:inst-fetch-with-context
   } catch (error) {
+    // @cpt-begin:cpt-frontx-dod-perf-telemetry-fail-open:p1:inst-fetch-error-status
     if (span) {
       span.setStatus({
         code: SpanStatusCode.ERROR,
@@ -387,6 +426,7 @@ export async function instrumentedFetch(
       });
     }
     throw error;
+    // @cpt-end:cpt-frontx-dod-perf-telemetry-fail-open:p1:inst-fetch-error-status
   } finally {
     span?.end();
   }
@@ -414,12 +454,15 @@ export function useWebVitals(routeId: string, enabled = true) {
 
   useEffect(() => {
     if (!enabled || typeof PerformanceObserver === 'undefined') return;
+    // @cpt-begin:cpt-frontx-flow-perf-telemetry-web-vitals:p1:inst-create-observers
     const tracer = getTracer('hai3-webvitals');
     const observers: PerformanceObserver[] = [];
     let clsCleanup: (() => void) | null = null;
     const mountTs = performance.now();
+    // @cpt-end:cpt-frontx-flow-perf-telemetry-web-vitals:p1:inst-create-observers
 
     try {
+      // @cpt-begin:cpt-frontx-flow-perf-telemetry-web-vitals:p1:inst-vital-span
       const lcpObserver = new PerformanceObserver((list) => {
         // Filter buffered entries to only include those from current route mount
         const entries = list.getEntries().filter((e) => e.startTime >= mountTs);
@@ -443,6 +486,7 @@ export function useWebVitals(routeId: string, enabled = true) {
       });
       lcpObserver.observe({ type: 'largest-contentful-paint', buffered: true });
       observers.push(lcpObserver);
+      // @cpt-end:cpt-frontx-flow-perf-telemetry-web-vitals:p1:inst-vital-span
     } catch (e) {
       getDebugLogger()?.('webvital.observer_unsupported', e instanceof Error ? e : String(e));
     }
@@ -451,6 +495,7 @@ export function useWebVitals(routeId: string, enabled = true) {
     // function declaration is not nested inside a `try` block (Codacy
     // "Move function declaration to function body root"). The observer
     // setup inside the `try` only references them.
+    // @cpt-begin:cpt-frontx-flow-perf-telemetry-web-vitals:p1:inst-vital-rating
     const clsState = { value: 0, reported: false };
     function reportCLS(): void {
       if (clsState.reported) return;
@@ -468,8 +513,10 @@ export function useWebVitals(routeId: string, enabled = true) {
       }, parentCtx);
       span.end();
     }
+    // @cpt-end:cpt-frontx-flow-perf-telemetry-web-vitals:p1:inst-vital-rating
 
     try {
+      // @cpt-begin:cpt-frontx-flow-perf-telemetry-web-vitals:p1:inst-vital-parenting
       const clsObserver = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
           if (entry.startTime < mountTs) continue;
@@ -485,11 +532,13 @@ export function useWebVitals(routeId: string, enabled = true) {
         document.removeEventListener('visibilitychange', reportCLS);
         if (!clsState.reported) reportCLS();
       };
+      // @cpt-end:cpt-frontx-flow-perf-telemetry-web-vitals:p1:inst-vital-parenting
     } catch (e) {
       getDebugLogger()?.('webvital.observer_unsupported', e instanceof Error ? e : String(e));
     }
 
     try {
+      // @cpt-begin:cpt-frontx-dod-perf-telemetry-vitals:p1:inst-capture-vitals
       const inpObserver = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
           if (entry.startTime < mountTs) continue;
@@ -511,11 +560,13 @@ export function useWebVitals(routeId: string, enabled = true) {
       });
       inpObserver.observe({ type: 'event', buffered: true, durationThreshold: 16 } as PerformanceObserverInit);
       observers.push(inpObserver);
+      // @cpt-end:cpt-frontx-dod-perf-telemetry-vitals:p1:inst-capture-vitals
     } catch (e) {
       getDebugLogger()?.('webvital.observer_unsupported', e instanceof Error ? e : String(e));
     }
 
     try {
+      // @cpt-begin:cpt-frontx-dod-perf-telemetry-vitals:p1:inst-observer-parenting
       const navEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
       if (navEntries.length > 0 && !wasNavigationTimingEmitted()) {
         markNavigationTimingEmitted();
@@ -533,6 +584,7 @@ export function useWebVitals(routeId: string, enabled = true) {
         }, parentCtx);
         span.end();
       }
+      // @cpt-end:cpt-frontx-dod-perf-telemetry-vitals:p1:inst-observer-parenting
     } catch (e) {
       getDebugLogger()?.('webvital.observer_unsupported', e instanceof Error ? e : String(e));
     }
@@ -551,6 +603,7 @@ export function useLongTaskObserver(routeId: string, enabled = true) {
   useEffect(() => {
     if (!enabled || typeof PerformanceObserver === 'undefined') return;
     try {
+      // @cpt-begin:cpt-frontx-dod-perf-telemetry-vitals:p1:inst-long-tasks
       const tracer = getTracer('hai3-runtime');
       const mountTime = performance.now();
       const observer = new PerformanceObserver((list) => {
@@ -571,6 +624,7 @@ export function useLongTaskObserver(routeId: string, enabled = true) {
       });
       observer.observe({ entryTypes: ['longtask'], buffered: true });
       return () => { observer.disconnect(); };
+      // @cpt-end:cpt-frontx-dod-perf-telemetry-vitals:p1:inst-long-tasks
     } catch (e) {
       getDebugLogger()?.('longtask.observer_unsupported', e instanceof Error ? e : String(e));
       return undefined;
@@ -585,6 +639,7 @@ export function useResourceTimingObserver(routeId: string, enabled = true) {
   useEffect(() => {
     if (!enabled || typeof PerformanceObserver === 'undefined') return;
     try {
+      // @cpt-begin:cpt-frontx-dod-perf-telemetry-vitals:p1:inst-resource-timing
       const tracer = getTracer('hai3-runtime');
       const mountTime = performance.now();
       const observer = new PerformanceObserver((list) => {
@@ -610,6 +665,7 @@ export function useResourceTimingObserver(routeId: string, enabled = true) {
       });
       observer.observe({ entryTypes: ['resource'], buffered: true });
       return () => { observer.disconnect(); };
+      // @cpt-end:cpt-frontx-dod-perf-telemetry-vitals:p1:inst-resource-timing
     } catch (e) {
       getDebugLogger()?.('resource.observer_unsupported', e instanceof Error ? e : String(e));
       return undefined;

@@ -115,23 +115,23 @@
     "@types/react-dom": "19.0.3",
     "@vitejs/plugin-react": "4.3.4",
     "autoprefixer": "10.4.23",
-    "concurrently": "^9.2.1",
+    "concurrently": "^9.2.4",
     "dependency-cruiser": "17.3.2",
     "eslint": "9.27.0",
     "eslint-plugin-react-hooks": "5.0.0",
     "eslint-plugin-unused-imports": "4.1.4",
     "globals": "15.12.0",
     "husky": "^9.1.7",
-    "js-yaml": "4.1.0",
+    "js-yaml": "4.3.0",
     "knip": "5.68.0",
     "lint-staged": "^16.2.7",
-    "postcss": "8.4.35",
-    "promptfoo": "^0.120.16",
+    "postcss": "8.5.20",
+    "promptfoo": "^0.121.19",
     "tailwindcss": "3.4.1",
     "tsx": "4.20.6",
     "typescript": "5.4.2",
     "typescript-eslint": "8.32.1",
-    "vite": "6.4.1"
+    "vite": "6.4.3"
   },
   "lint-staged": {
     "*": [

@@ -122,16 +122,16 @@
     "eslint-plugin-unused-imports": "4.1.4",
     "globals": "15.12.0",
     "husky": "^9.1.7",
-    "js-yaml": "4.1.0",
+    "js-yaml": "4.3.2",
     "knip": "5.68.0",
     "lint-staged": "^16.2.7",
-    "postcss": "8.4.35",
-    "promptfoo": "^0.120.16",
+    "postcss": "8.5.28",
+    "promptfoo": "^0.123.1",
     "tailwindcss": "3.4.1",
     "tsx": "4.20.6",
     "typescript": "5.4.2",
     "typescript-eslint": "8.32.1",
-    "vite": "6.4.1"
+    "vite": "8.3.1"
   },
   "lint-staged": {
     "*": [
